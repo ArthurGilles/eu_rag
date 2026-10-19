@@ -1,0 +1,31 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "arthurgilles", email = "arthurgilles12@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "celery>=5.6.3",
+    "fastapi[standard]>=0.147.0",
+    "psycopg[binary]>=3.3.6",
+    "pydantic-settings>=2.16.0",
+    "qdrant-client>=1.19.1",
+    "redis>=8.1.0",
+    "sqlalchemy[asyncio]>=2.1.5",
+    "sqlmodel>=0.0.48",
+    "watchfiles>=1.3.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.1",
+]

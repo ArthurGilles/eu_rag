@@ -1,0 +1,93 @@
+# Config commune backend + worker Celery (même image)
+x-backend: &backend
+  build:
+    context: ./backend
+  image: eu_rag-backend
+  restart: unless-stopped
+  environment:
+    - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-dev}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-mydb}
+    - REDIS_URL=redis://redis:6379/0
+    - QDRANT_HOST=qdrant
+    - MISTRAL_API_KEY=${MISTRAL_API_KEY:?MISTRAL_API_KEY is missing in .env}
+  volumes:
+    - ./backend:/app
+    - /app/.venv
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    qdrant:
+      condition: service_started
+
+services:
+  # 1. Base relationnelle
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: ${POSTGRES_DB:-mydb}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER-dev} -d $${POSTGRES_DB-mydb}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # 2. Broker de messages en RAM (Redis)
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # 3. Base vectorielle (Qdrant)
+  qdrant:
+    image: qdrant/qdrant:v1.19.2
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333" # API REST et Dashboard web Qdrant
+      - "127.0.0.1:6334:6334" # API gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  # 4. API Web FastAPI
+  backend:
+    <<: *backend
+    ports:
+      - "127.0.0.1:8000:8000"
+    # uv run synchronise le .venv avec uv.lock à chaque démarrage
+    command: uv run --locked fastapi dev src/backend/main.py --host 0.0.0.0 --port 8000
+
+  # 5. Worker Celery
+  celery_worker:
+    <<: *backend
+    # On utilise watchfiles pour surveiller les fichiers .py et relancer Celery à chaud
+    command: uv run --locked watchfiles --filter python "celery -A backend.core.celery_app.celery_app worker --loglevel=info" /app/src
+
+  # 6. Frontend React (Vite)
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  qdrant_data:
