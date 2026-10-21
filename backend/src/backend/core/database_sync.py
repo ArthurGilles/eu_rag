@@ -1,3 +1,6 @@
+from collections.abc import Generator
+from contextlib import contextmanager
+
 from celery import Task
 from sqlalchemy import Engine
 from sqlmodel import Session, create_engine
@@ -25,5 +28,7 @@ class DatabaseTask(Task):
             )
         return self._engine
 
-    def session(self) -> Session:
-        return Session(self.engine)
+    @contextmanager
+    def session(self) -> Generator[Session, None, None]:
+        with Session(self.engine) as session:
+            yield session
